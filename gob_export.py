@@ -214,18 +214,33 @@ class GoB_OT_export(Operator):
                 if utils.prefs().performance_profiling: 
                     start_time = utils.profiler(start_time, "    UV: polygones")
 
-                for face in mesh_tmp.polygons:
-                    for loop_index in face.loop_indices:
-                        uv = uv_layer.data[loop_index].uv
-                        if utils.prefs().export_uv_flip_x:
-                            uv.x = 1.0 - uv.x
-                        if utils.prefs().export_uv_flip_y:
-                            uv.y = 1.0 - uv.y
+                total_uvs = len(mesh_tmp.polygons) * 4
+                uv_coords = np.zeros(total_uvs * 2, dtype=np.float32)
+                uv_layer.data.foreach_get('uv', uv_coords)
+                uv_coords = uv_coords.reshape(-1, 2)
+                if utils.prefs().export_uv_flip_x:
+                    uv_coords[:, 0] = 1.0 - uv_coords[:, 0]
+                if utils.prefs().export_uv_flip_y:
+                    uv_coords[:, 1] = 1.0 - uv_coords[:, 1]
 
-                        goz_file.write(pack('<2f', uv.x, uv.y))
+                # Create an array of results with 4 UV coordinates per face
+                total_faces = len(mesh_tmp.polygons)
+                uv_data = np.zeros(total_faces * 8, dtype=np.float32)  # 8 = 4 UV coordinates * 2 components
 
+                coord_index = 0
+                uv_data_index = 0
+
+                for i, face in enumerate(mesh_tmp.polygons):
+                    face_uvs = uv_coords[coord_index:coord_index + len(face.loop_indices)]
+                    uv_data[uv_data_index:uv_data_index + len(face_uvs.flatten())] = face_uvs.flatten()
+                    # For triangular faces, add the 4th UV coordinate [0.0, 1.0]
                     if len(face.loop_indices) == 3:
-                        goz_file.write(pack('<2f', 0.0, 1.0))
+                        uv_data[uv_data_index + 6:uv_data_index + 8] = [0.0, 1.0]  # 6,7 is the 4th UV coordinate
+
+                    coord_index += len(face.loop_indices)
+                    uv_data_index += 8  # 8 float values per face
+
+                goz_file.write(pack(f'<{len(uv_data)}f', *uv_data))
 
                 if utils.prefs().performance_profiling: 
                     start_time = utils.profiler(start_time, "    UV: write uvs")
