@@ -198,16 +198,22 @@ class GoB_OT_export(Operator):
                 if utils.prefs().export_uv_flip_y:
                     uv_coords[:, 1] = 1.0 - uv_coords[:, 1]
 
-                uv_data = []
-                coord_index = 0
-                for face in mesh_tmp.polygons:
-                    for loop_index in face.loop_indices:
-                        x, y = uv_coords[coord_index]
-                        uv_data.extend([x, y])
-                        coord_index += 1
+                # Create an array of results with 4 UV coordinates per face
+                total_faces = len(mesh_tmp.polygons)
+                uv_data = np.zeros(total_faces * 8, dtype=np.float32)  # 8 = 4 UV coordinates * 2 components
 
+                coord_index = 0
+                uv_data_index = 0
+
+                for i, face in enumerate(mesh_tmp.polygons):
+                    face_uvs = uv_coords[coord_index:coord_index + len(face.loop_indices)]
+                    uv_data[uv_data_index:uv_data_index + len(face_uvs.flatten())] = face_uvs.flatten()
+                    # For triangular faces, add the 4th UV coordinate [0.0, 1.0]
                     if len(face.loop_indices) == 3:
-                        uv_data.extend([0.0, 1.0])
+                        uv_data[uv_data_index + 6:uv_data_index + 8] = [0.0, 1.0]  # 6,7 is the 4th UV coordinate
+
+                    coord_index += len(face.loop_indices)
+                    uv_data_index += 8  # 8 float values per face
 
                 goz_file.write(pack(f'<{len(uv_data)}f', *uv_data))
 
