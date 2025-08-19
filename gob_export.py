@@ -180,26 +180,21 @@ class GoB_OT_export(Operator):
             goz_file.write(pack('<I', numFaces*4*4+16))
             goz_file.write(pack('<Q', numFaces))
             
-            face_vertices = np.zeros(numFaces * 4, dtype=np.int32)
-            mesh_tmp.polygons.foreach_get('vertices', face_vertices)
-            face_vertices = face_vertices.reshape(-1, 4)
+            face_data = bytearray()
             
-            face_vertex_counts = np.zeros(numFaces, dtype=np.int32)
-            mesh_tmp.polygons.foreach_get('loop_total', face_vertex_counts)
+            for face in mesh_tmp.polygons:
+                if len(face.vertices) == 4:
+                    face_data.extend(pack('<4I', face.vertices[0],
+                                face.vertices[1],
+                                face.vertices[2],
+                                face.vertices[3]))
+                elif len(face.vertices) == 3:
+                    face_data.extend(pack('<3I4B', face.vertices[0],
+                                face.vertices[1],
+                                face.vertices[2],
+                                0xFF, 0xFF, 0xFF, 0xFF))
             
-            quad_faces = face_vertex_counts == 4
-            tri_faces = face_vertex_counts == 3
-            
-            if np.any(quad_faces):
-                quad_indices = face_vertices[quad_faces]
-                quad_data = quad_indices.flatten()
-                goz_file.write(pack(f'<{len(quad_data)}I', *quad_data))
-            
-            if np.any(tri_faces):
-                tri_indices = face_vertices[tri_faces]
-                for i in range(len(tri_indices)):
-                    goz_file.write(pack('<3I4B', tri_indices[i][0], tri_indices[i][1], 
-                                      tri_indices[i][2], 0xFF, 0xFF, 0xFF, 0xFF))
+            goz_file.write(face_data)
             
             if utils.prefs().performance_profiling: 
                 start_time = utils.profiler(start_time, "Write Faces")
